@@ -5,10 +5,14 @@ from fastmcp import FastMCP
 from sqlalchemy.orm import Session
 from typing import Union, Optional
 from dotenv import load_dotenv
-
 import os
 import httpx
 
+# ==================== ENV ====================
+load_dotenv()
+SYSTEM_VERSION = os.getenv("SYSTEM_VERSION", "v1")
+
+# ==================== CORE IMPORTS ====================
 from db import SessionLocal, init_db, get_db
 from seed import seed
 from services import flight, user, booking
@@ -21,37 +25,11 @@ from schemas import (
     UserRegistration,
 )
 
-# ==================== ENV ====================
-load_dotenv()
+# ==================== GLOBAL STATE (V2) ====================
+engine = None
 
-# ==================== MCP SERVER ====================
+# ==================== MCP ====================
 mcp = FastMCP("Galaxium Booking System")
-
-
-# ==================== TOOL RUNTIME LAYER ====================
-from agents.tools.registry import ToolRegistry
-from agents.tools.register import register_tools
-from agents.runtime.tool_runtime import ToolRuntime
-from agents.runtime.agent_router import AgentRouter
-from orchestration.engine import OrchestrationEngine
-
-# Create registry
-tool_registry = ToolRegistry()
-
-# Register tools (wraps service layer safely)
-register_tools(tool_registry)
-
-# Runtime executor
-tool_runtime = ToolRuntime(tool_registry)
-
-# LLM router (pluggable: OpenAI / Ollama later)
-router = AgentRouter(
-    llm_client=None,
-    tool_registry=tool_registry
-)
-
-# Orchestration engine
-engine = OrchestrationEngine(router, tool_runtime)
 
 
 # ==================== MCP TOOLS ====================
@@ -101,7 +79,7 @@ def register_user(name: str, email: str) -> UserOut:
 
 
 @mcp.tool()
-def get_user_id(name: str, email: str) -> UserOut:
+def get_user(name: str, email: str) -> UserOut:
     db = SessionLocal()
     try:
         return user.get_user(db, name, email)
@@ -109,50 +87,74 @@ def get_user_id(name: str, email: str) -> UserOut:
         db.close()
 
 
-# MCP app mount
 mcp_app = mcp.http_app()
+
+
+# ==================== ENGINE INITIALIZER ====================
+def init_v2_engine():
+    """
+    Centralized V2 bootstrap.
+    Prevents partial initialization bugs.
+    """
+    from agents.tools.registry import ToolRegistry
+    from agents.tools.register import register_tools
+    from agents.runtime.tool_runtime import ToolRuntime
+    from agents.runtime.agent_router import AgentRouter
+    from orchestration.engine import OrchestrationEngine
+
+    registry = ToolRegistry()
+    register_tools(registry)
+
+    runtime = ToolRuntime(registry)
+
+    router = AgentRouter(
+        llm_client=None,
+        tool_registry=registry
+    )
+
+    return OrchestrationEngine(router, runtime)
 
 
 # ==================== LIFESPAN ====================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global engine
+
     init_db()
 
-    should_seed = os.getenv("SEED_DEMO_DATA", "true").lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-
-    if should_seed:
+    if os.getenv("SEED_DEMO_DATA", "true").lower() == "true":
         seed()
+
+    if SYSTEM_VERSION == "v2":
+        from agents.tools.registry import ToolRegistry
+        from agents.tools.register import register_tools
+        from agents.runtime.tool_runtime import ToolRuntime
+        from agents.runtime.agent_router import AgentRouter
+        from orchestration.engine import OrchestrationEngine
+
+        registry = ToolRegistry()
+        register_tools(registry)
+
+        runtime = ToolRuntime(registry)
+
+        router = AgentRouter()
+
+        engine = OrchestrationEngine(router, runtime)
 
     yield
 
 
-# ==================== FASTAPI APP ====================
+# ==================== APP ====================
 app = FastAPI(
     title="Galaxium Booking System",
-    description="API + Agent Runtime + MCP",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
-    root_path="/api",
 )
 
-
-# ==================== AGENT ENDPOINT ====================
-@app.post("/agent")
-def agent_endpoint(payload: dict):
-    return engine.run(payload["input"], payload)
-
-
 # ==================== CORS ====================
-allowed_origins = os.getenv("CORS_ORIGINS", "*").split(",")
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=os.getenv("CORS_ORIGINS", "*").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -162,7 +164,22 @@ app.add_middleware(
 # ==================== HEALTH ====================
 @app.get("/")
 def health():
-    return {"status": "OK"}
+    return {
+        "status": "OK",
+        "version": SYSTEM_VERSION
+    }
+
+
+# ==================== AGENT ====================
+@app.post("/agent")
+def agent_endpoint(payload: dict):
+    if SYSTEM_VERSION == "v1":
+        return {"mode": "v1", "result": "disabled"}
+
+    if engine is None:
+        return {"success": False, "error": "engine not initialized"}
+
+    return engine.run(payload.get("input", ""), payload)
 
 
 # ==================== FLIGHTS ====================
@@ -230,7 +247,7 @@ def get_user_endpoint(name: str, email: str, db: Session = Depends(get_db)):
     return user.get_user(db, name, email)
 
 
-# ==================== JAVA SERVICE PROXY ====================
+# ==================== JAVA PROXY ====================
 JAVA_SERVICE_URL = os.getenv("JAVA_SERVICE_URL", "http://localhost:8080")
 
 
@@ -248,12 +265,11 @@ async def get_quote(quote_id: str):
         return r.json()
 
 
-# ==================== MCP MOUNT ====================
+# ==================== MCP ====================
 app.mount("/mcp", mcp_app)
 
 
 # ==================== MAIN ====================
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8001)
