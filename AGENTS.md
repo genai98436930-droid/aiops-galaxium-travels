@@ -1,40 +1,87 @@
+
+---
+
+# ✅ 3. AGENTS.md (fully Markdown-safe + cleaned)
+
+```markdown
 # AGENTS.md
 
-This is a demo, that is supposed to mimic a real enterprise system! This is not a production system!
-It is supposed to showcase different challenges that real enterprise systems face to show the capabilities of the AI-native IDE Bob.
+This is a demo system, not production software.
 
-This file provides guidance to agents when working with code in this repository.
+It is designed to mimic enterprise architecture patterns for AI-native tooling experiments.
 
-## Critical Non-Obvious Patterns
+---
+
+## ⚠️ Critical Non-Obvious Patterns
 
 ### Backend Architecture
-- **MCP server MUST be created before FastAPI app** (line 16 in server.py) - MCP lifespan must be combined with FastAPI lifespan
-- **MCP tools manually create/close DB sessions** - They use `SessionLocal()` directly, not FastAPI's dependency injection
-- **Service functions return Union types** - Return either success model OR ErrorResponse, not exceptions (see booking.py)
-- **Name verification required for bookings** - book_flight() validates both user_id AND name match (non-standard security pattern)
-- **SQLite is the production database** - No external DB; `DATABASE_URL` env var is intentionally unset in ECS so db.py defaults to SQLite
-- **Data is ephemeral in ECS** - SQLite file lives on container filesystem; demo data re-seeds on every task start via `SEED_DEMO_DATA=true`
 
-### Testing
-- **Tests use in-memory SQLite with StaticPool** - Required for thread safety in tests (conftest.py line 21)
-- **Monkeypatch SessionLocal in tests** - Must patch both `db.SessionLocal` and `server.SessionLocal` (conftest.py lines 49-50)
-- **Seed function disabled in tests** - Explicitly patched to prevent data pollution (conftest.py line 53)
-- Run single test: `cd backend && pytest tests/test_services.py::test_name -v`
+- Single entrypoint: `/api/agent`
+- Request flow:
 
-### Frontend
-- **API base URL from env var** - Uses `import.meta.env.VITE_API_URL` (not process.env)
-- **Error responses have specific structure** - Check `success: false` field, not HTTP status codes (api.ts line 112)
-- **Custom Tailwind colors** - Space-themed palette defined in tailwind.config.js (not standard Tailwind)
+server.py → OrchestrationEngine → AgentRouter → ToolRuntime → Services → DB
 
-## Commands
-- **Backend tests**: `cd backend && pytest` (must run from backend dir)
-- **Frontend dev**: `cd frontend && npm run dev`
-- **Start both**: `./start.sh` (wrapper to infra/local/start_locally.sh)
-- **Deploy AWS**: `./infra/aws/deploy-to-aws.sh`
-- **Deploy IBM**: `./infra/ibm/deploy-to-ibm.sh`
-- **Test containers**: `./infra/local/test-containers.sh`
+- Tool registry defines execution mapping:
 
-## Java Hold Service
-- **Directory**: `inventory_hold_service/` (currently empty - not yet implemented)
-- **Purpose**: Planned Spring Boot service for managing temporary seat holds
-- **Status**: The startup script gracefully skips this service if not present
+tool_name → function
+
+- SQLite is the only database
+- No external DB dependency
+
+---
+
+## 🧪 Testing Rules
+
+- Uses in-memory SQLite for tests
+- Requires session mocking
+- Seed data is disabled in test mode
+
+Run tests:
+
+```bash
+cd backend
+pytest
+
+## 🧪 Testing Rules
+
+- Uses in-memory SQLite for tests
+- Requires session mocking
+- Seed data is disabled in test mode
+
+Run tests:
+```bash
+cd backend
+pytest
+
+🧩 Tool System
+Tools are registered in:
+agents/tools/register.py
+
+Tools map directly to service functions
+
+🖥️ Frontend Notes
+API base URL:
+VITE_API_URL
+
+Error handling uses structured responses
+
+🚀 Commands
+Backend tests:
+cd backend && pytest
+
+Frontend dev:
+cd frontend && npm run dev
+
+Start system:
+./start.sh
+
+📌 Design Philosophy
+- Deterministic routing
+- Minimal orchestration complexity
+- Service-layer business logic
+- Simple SQLite persistence
+
+⚠️ V1 Limitation
+- No multi-step agent planning
+- One tool per request
+

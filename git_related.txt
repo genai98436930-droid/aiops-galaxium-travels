@@ -1,0 +1,61 @@
+
+1   git clone
+
+
+2   ensure destination is clean 
+pwd
+ls -la
+git remote -v
+git branch
+
+3   copy projects files
+rsync -av \
+--exclude='.git' \
+--exclude='__pycache__' \
+--exclude='.venv' \
+--exclude='*.pyc' \
+--exclude='node_modules' \
+~/aiops-v1-stable/workspace/galaxium-travels/ \
+~/aiops-galaxium-travels/
+
+4   verify copy tree
+cd ~/aiops-galaxium-travels
+ls -la
+tree -L 2 -I '.git|.venv|__pycache__|node_modules'
+
+5 modify .gitignore
+cat > .gitignore << 'EOF'
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+env/
+node_modules/
+dist/
+build/
+*.sqlite3
+*.db
+.DS_Store
+.idea/
+.vscode/
+EOF
+
+6 stage everything
+git add .
+git status
+
+7 git commit
+git commit -m "Initial stable V1 agentic galaxium travels backup"
+
+8   push to github
+git push -u origin main
+
+git checkout -b main
+
+9 subsequent add
+git add AGENTS.md ARCHITECTURE.md README.md
+
+git commit -m "docs: stabilize V1 architecture, agents, and README"
+git push origin main
+

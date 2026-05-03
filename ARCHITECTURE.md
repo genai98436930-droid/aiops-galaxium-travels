@@ -1,64 +1,48 @@
-# Project Title
+# 🧠 Galaxium Travels - Architecture (V1)
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-brightgreen)]()
+## Overview
 
-Galaxium Travels — Agentic Flight System (V1)
-A FastAPI-based agentic backend system that routes natural language requests into deterministic tool executions (flights, bookings, users).
+Galaxium Travels is a **tool-based agentic backend system** where natural language requests are routed into deterministic tool executions.
 
+---
 
-
-## Table of Contents
-
-- [Features](#features)
-- [Architecture](#architecture)
-- [Installation](#installation)
-- [Usage](#usage)
-- [API Documentation](#api-documentation)
-- [Configuration](#configuration)
-- [Testing](#testing)
-- [Contributing](#contributing)
-- [License](#license)
-- [Acknowledgments](#acknowledgments)
-
-## Features
-
-This system exposes a single intelligent endpoint:
-
-POST /api/agent
-
-- Instead of calling multiple APIs directly, users send natural language input and the system:
-
-- Interprets intent (router / optional LLM)
-- Maps it to a tool
-- Executes backend logic
-- Returns structured output
-
-## Architecture
+## System Architecture
 
 ```mermaid
 flowchart TD
-    Client --> API["/api/agent/"]
-    API --> Engine["Orchestration Engine"]
-    Engine --> Router["Agent Router"]
-    Router --> Runtime["Tool Runtime"]
-    Runtime --> Services["Business Services"]
-    Services --> DB[("Database")]
-'''
-## Installation
+    Client[Client / curl / frontend] --> API[/api/agent endpoint/]
 
-### Prerequisites
-- Node.js 18+ / Python 3.10+ / etc.
-- Package manager (npm, pip, etc.)
+    API --> Server[server.py]
+    Server --> Engine[OrchestrationEngine]
+    Engine --> Router[AgentRouter]
+    Router --> Runtime[ToolRuntime]
 
-### Steps
+    Runtime --> Registry[ToolRegistry]
+    Registry --> ToolMap[agents/tools/register.py]
 
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/yourproject.git
+    ToolMap --> Services[Service Layer]
+    Services --> DB[(SQLite Database)]
 
-# Navigate to the project directory
-cd yourproject
+### 🔧 Core Components
+- API Layer
+- Single endpoint: /api/agent
+- Orchestration Engine
+- Controls execution flow
+- Agent Router
+  Maps user input → tool name
+- Tool Runtime
+  Executes selected tool safely
+- Tool Registry
+  Maps tool names → functions
+- Services Layer
+  Business logic layer
+  Direct DB access
 
-# Install dependencies
-npm install   # or pip install -r requirements.txt
+## 🧩 Design Principles
+Tools = execution layer
+Services = business logic
+Router = decision layer
+Runtime = execution layer
+## ⚠️ V1 Constraint
+One request → one tool execution
+Deterministic routing only
